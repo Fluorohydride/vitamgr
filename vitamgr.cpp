@@ -1,11 +1,3 @@
-#include <iostream>
-#include <fstream>
-#include <cstdint>
-#include <thread>
-#include <unordered_map>
-#include <vector>
-#include <string.h>
-
 #ifdef _WIN32
 #include <winsock2.h>
 #else
@@ -15,6 +7,14 @@
 #include <unistd.h>
 #endif
 #include <zlib.h>
+
+#include <iostream>
+#include <fstream>
+#include <cstdint>
+#include <thread>
+#include <unordered_map>
+#include <vector>
+#include <string.h>
 
 const int32_t ZIP_FILE_SIZE = 30;
 const int32_t ZIP_DIRECTORY_SIZE = 46;
@@ -440,6 +440,12 @@ int32_t main(int32_t argc, char* argv[]) {
         show_usage(argv[0]);
         return 0;
     }
+#ifdef _WIN32
+    {
+        WSADATA wsadata;
+        WSAStartup(MAKEWORD(2,2), &wsadata);
+    }
+#endif
     DataReader* dr = nullptr;
     size_t max_sz = 0;
     sockaddr_in addr;
@@ -569,5 +575,8 @@ int32_t main(int32_t argc, char* argv[]) {
         }
     }
     close(sock);
+#ifdef _WIN32
+    WSACleanup();
+#endif
     return 0;
 }
