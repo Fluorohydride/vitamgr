@@ -10,6 +10,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+
 #include <zlib.h>
 
 const int32_t ZIP_FILE_SIZE = 30;
@@ -102,6 +103,7 @@ public:
     virtual uint32_t Read(uint8_t* buffer, uint32_t buffer_size) = 0;
     virtual void SetOffset(uint32_t offset) = 0;
     virtual uint32_t LeftSize() = 0;
+    virtual ~DataReader() {}
 };
 
 class FileReader : public DataReader {
@@ -120,7 +122,8 @@ public:
     uint32_t Read(uint8_t* buffer, uint32_t buffer_size) {
         size_t read_left = file_size - file.tellg();
         uint32_t read_bytes = (read_left >= buffer_size) ? buffer_size : read_left;
-        return file.read((char*)buffer, read_bytes);
+        file.read((char*)buffer, read_bytes);
+        return read_bytes;
     }
     
     void SetOffset(uint32_t offset) {
@@ -525,6 +528,7 @@ int32_t main(int32_t argc, char* argv[]) {
                 estr.avail_out = 256;
                 estr.next_out = dbuf;
                 inflate(&estr, Z_NO_FLUSH);
+                inflateEnd(&estr);
             } else {
                 dr->Read(dbuf, 256);
             }
@@ -569,5 +573,6 @@ int32_t main(int32_t argc, char* argv[]) {
         }
     }
     close(sock);
+    delete dr;
     return 0;
 }
