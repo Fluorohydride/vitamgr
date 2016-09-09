@@ -4,9 +4,9 @@ Command line tool for VitaShell remote management (Modified version)
 
 Usage:
 
-vitamgr <ip> copy <local_file> <remote_file>
+vitamgr [ip] copy [local_file] [remote_file]
 
-vitamgr <ip> install <local_vpk>
+vitamgr [ip] install [local_vpk]
 
 todo:
 
