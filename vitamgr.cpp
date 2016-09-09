@@ -1,3 +1,13 @@
+#ifdef _WIN32
+#include <winsock2.h>
+#else
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#endif
+#include <zlib.h>
+
 #include <iostream>
 #include <fstream>
 #include <cstdint>
@@ -6,20 +16,11 @@
 #include <vector>
 #include <string.h>
 
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-
-#include <zlib.h>
-
 const int32_t ZIP_FILE_SIZE = 30;
 const int32_t ZIP_DIRECTORY_SIZE = 46;
 const int32_t ZIP_END_BLOCK_SIZE = 22;
 
-#ifdef _WIN32
 #pragma pack(push, 2)
-#endif
 // header = 0x02014b50
 struct ZipDirectoryHeader {
     int32_t block_header;
@@ -41,14 +42,12 @@ struct ZipDirectoryHeader {
     int32_t data_offset;
 #ifdef _WIN32
 };
-#pragma pack(pop)
 #else
 } __attribute__((packed));
 #endif
+#pragma pack(pop)
 
-#ifdef _WIN32
 #pragma pack(push, 2)
-#endif
 // header = 0x04034b50
 struct ZipFileHeader {
     int32_t block_header;
@@ -64,14 +63,12 @@ struct ZipFileHeader {
     int16_t ex_size;
 #ifdef _WIN32
 };
-#pragma pack(pop)
 #else
 } __attribute__((packed));
 #endif
+#pragma pack(pop)
 
-#ifdef _WIN32
 #pragma pack(push, 2)
-#endif
 // header = 0x06054b50
 struct ZipEndBlock {
     int32_t block_header;
@@ -84,10 +81,10 @@ struct ZipEndBlock {
     int16_t comment_size;
 #ifdef _WIN32
 };
-#pragma pack(pop)
 #else
 } __attribute__((packed));
 #endif
+#pragma pack(pop)
 
 struct ZipFileInfo {
     bool compressed = false;
@@ -123,7 +120,8 @@ public:
         size_t read_left = file_size - file.tellg();
         uint32_t read_bytes = (read_left >= buffer_size) ? buffer_size : read_left;
         file.read((char*)buffer, read_bytes);
-        return read_bytes;
+        if (!file.good()) return 0;
+        return file.gcount();
     }
     
     void SetOffset(uint32_t offset) {
@@ -319,7 +317,7 @@ void send_resp(int client, short type, int result) {
     VTRP_RES res;
     res.type = type;
     res.result = result;
-    send(client, &res, 8, 0);
+    send(client, (const char*)&res, 8, 0);
 }
 
 int32_t mode = 0;
@@ -349,7 +347,7 @@ int32_t handle_packet(DataReader* dr, int client, short type, void* data, int32_
             uint32_t sz_to_end = dr->LeftSize();
             if(sz_to_end == 0) {
                 VTP_FILE_END fe;
-                send(client, &fe, 4, 0);
+                send(client, (const char*)&fe, 4, 0);
             }
             VTP_FILE_CONTENT fc;
             if(sz_to_end >= 2 * 1024 * 1024) {
@@ -357,21 +355,21 @@ int32_t handle_packet(DataReader* dr, int client, short type, void* data, int32_
                 fc.hdr.length = 4 + 1024;
                 for(int32_t i = 0; i < 2048; ++i) {
                     dr->Read(fc.buf, 1024);
-                    send(client, &fc, 4 + 1024, 0);
+                    send(client, (const char*)&fc, 4 + 1024, 0);
                 }
                 fc.hdr.length = 4;
-                send(client, &fc, 4, 0);
+                send(client, (const char*)&fc, 4, 0);
             } else {
                 fc.hdr.length = 4 + 1024;
                 for(int32_t i = 0; i < sz_to_end / 1024; ++i) {
                     dr->Read(fc.buf, 1024);
-                    send(client, &fc, 4 + 1024, 0);
+                    send(client, (const char*)&fc, 4 + 1024, 0);
                 }
                 fc.hdr.length = 4 + (sz_to_end % 1024);
                 dr->Read(fc.buf, sz_to_end % 1024);
-                send(client, &fc, fc.hdr.length, 0);
+                send(client, (const char*)&fc, fc.hdr.length, 0);
                 VTP_FILE_END fe;
-                send(client, &fe, 4, 0);
+                send(client, (const char*)&fe, 4, 0);
             }
             break;
         }
@@ -393,11 +391,11 @@ int32_t handle_packet(DataReader* dr, int client, short type, void* data, int32_
                 bf.hdr.type = 0x10;
                 bf.size = inf.second->comp_size;
                 bf.flag = (inf.second->compressed) ? (0x1 + 0x2) : 0x1;
-                send(client, &bf, bf.hdr.length, 0);
+                send(client, (const char*)&bf, bf.hdr.length, 0);
             } else {
                 // all file sent
                 VTP_INSTALL_VPK_END ve;
-                send(client, &ve, 4, 0);
+                send(client, (const char*)&ve, 4, 0);
             }
             break;
         }
@@ -423,7 +421,7 @@ int32_t handle_packet(DataReader* dr, int client, short type, void* data, int32_
             bf.hdr.type = 0x10;
             bf.size = inf.second->comp_size;
             bf.flag = (inf.second->compressed) ? (0x1 + 0x2) : 0x1;
-            send(client, &bf, bf.hdr.length, 0);
+            send(client, (const char*)&bf, bf.hdr.length, 0);
             break;
         }
         case 0x1c: {
@@ -445,6 +443,12 @@ int32_t main(int32_t argc, char* argv[]) {
         show_usage(argv[0]);
         return 0;
     }
+#ifdef _WIN32
+    {
+        WSADATA wsadata;
+        WSAStartup(MAKEWORD(2,2), &wsadata);
+    }
+#endif
     DataReader* dr = nullptr;
     size_t max_sz = 0;
     sockaddr_in addr;
@@ -506,7 +510,7 @@ int32_t main(int32_t argc, char* argv[]) {
             bf.hdr.type = 0x10;
             bf.size = max_sz;
             bf.flag = 0x1;
-            send(sock, &bf, bf.hdr.length, 0);
+            send(sock, (const char*)&bf, bf.hdr.length, 0);
         } else if(mode == 2) {
             VTP_INSTALL_VPK iv;
             iv.hdr.length = sizeof(iv);
@@ -537,7 +541,7 @@ int32_t main(int32_t argc, char* argv[]) {
             uint64_t authid = *(uint64_t *)(dbuf + 0x80);
             if (authid == 0x2F00000000000001 || authid == 0x2F00000000000003)
                 iv.flag = 0x8;
-            send(sock, &iv, iv.hdr.length, 0);
+            send(sock, (const char*)&iv, iv.hdr.length, 0);
         }
         pkt_base hdr;
         // begin recv
@@ -576,5 +580,8 @@ int32_t main(int32_t argc, char* argv[]) {
     }
     close(sock);
     delete dr;
+#ifdef _WIN32
+    WSACleanup();
+#endif
     return 0;
 }
