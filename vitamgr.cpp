@@ -100,6 +100,7 @@ public:
     virtual uint32_t Read(uint8_t* buffer, uint32_t buffer_size) = 0;
     virtual void SetOffset(uint32_t offset) = 0;
     virtual uint32_t LeftSize() = 0;
+    virtual ~DataReader() {}
 };
 
 class FileReader : public DataReader {
@@ -184,16 +185,18 @@ public:
                 dir_header = reinterpret_cast<ZipDirectoryHeader*>(&buffer[pos]);
                 if(dir_header->block_header != 0x02014b50)
                     continue;
-                memcpy(name_buffer, &buffer[pos + ZIP_DIRECTORY_SIZE], dir_header->name_size);
-                name_buffer[dir_header->name_size] = 0;
-                std::string name = name_buffer;
-                ZipFileInfo& finfo = entries[name];
-                finfo.compressed = (dir_header->comp_fun == 0x8);
-                finfo.comp_size = dir_header->comp_size;
-                finfo.file_size = dir_header->file_size;
-                finfo.data_offset = dir_header->data_offset;
+                if(dir_header->comp_size > 0) {
+                    memcpy(name_buffer, &buffer[pos + ZIP_DIRECTORY_SIZE], dir_header->name_size);
+                    name_buffer[dir_header->name_size] = 0;
+                    std::string name = name_buffer;
+                    ZipFileInfo& finfo = entries[name];
+                    finfo.compressed = (dir_header->comp_fun == 0x8);
+                    finfo.comp_size = dir_header->comp_size;
+                    finfo.file_size = dir_header->file_size;
+                    finfo.data_offset = dir_header->data_offset;
+                }
                 pos += ZIP_DIRECTORY_SIZE + dir_header->name_size + dir_header->ex_size + dir_header->cmt_size;
-                total_size += finfo.comp_size;
+                total_size += dir_header->comp_size;
             }
         }
         delete[] buffer;
@@ -380,7 +383,7 @@ int32_t handle_packet(DataReader* dr, int client, short type, void* data, int32_
             std::cout << "done. " << prog.first + 1 << "/" << prog.second << std::endl;
             auto inf = vr->NextFileInfo();
             if(inf.first != nullptr) {
-                std::cout << "begin upload " << *inf.first << " ... ";
+                std::cout << "begin upload " << *inf.first << " ... " << std::flush;
                 vr->BeginReadFile(inf.first->c_str());
                 VTP_BEGIN_FILE bf;
                 sprintf(bf.name, "ux0:ptmp/pkg/%s", inf.first->c_str());
@@ -410,7 +413,7 @@ int32_t handle_packet(DataReader* dr, int client, short type, void* data, int32_
             VpkReader* vr = static_cast<VpkReader*>(dr);
             std::cout << "install begin." << std::endl;
             auto inf = vr->FirstFileInfo();
-            std::cout << "begin upload " << *inf.first << " ... ";
+            std::cout << "begin upload " << *inf.first << " ... " << std::flush;
             vr->BeginReadFile(inf.first->c_str());
             VTP_BEGIN_FILE bf;
             sprintf(bf.name, "ux0:ptmp/pkg/%s", inf.first->c_str());
@@ -531,6 +534,7 @@ int32_t main(int32_t argc, char* argv[]) {
                 estr.avail_out = 256;
                 estr.next_out = dbuf;
                 inflate(&estr, Z_NO_FLUSH);
+                inflateEnd(&estr);
             } else {
                 dr->Read(dbuf, 256);
             }
@@ -575,6 +579,7 @@ int32_t main(int32_t argc, char* argv[]) {
         }
     }
     close(sock);
+    delete dr;
 #ifdef _WIN32
     WSACleanup();
 #endif
