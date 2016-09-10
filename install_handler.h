@@ -144,7 +144,7 @@ public:
                     continue;
                 memcpy(name_buffer, &buffer[pos + ZIP_DIRECTORY_SIZE], dir_header->name_size);
                 name_buffer[dir_header->name_size] = 0;
-                if((dir_header->exter_att & 0x10) || (name_buffer[dir_header->name_size - 1] == '/')) { // dir
+                if(!(dir_header->exter_att & 0x10) && (name_buffer[dir_header->name_size - 1] != '/')) { // dir
                     std::string name = name_buffer;
                     ZipFileInfo& finfo = entries[name];
                     finfo.compressed = (dir_header->comp_fun == 0x8);
@@ -164,13 +164,31 @@ public:
         return true;
     }
     
+    void SendBuffer(Sender&s) {
+        VTP_VPK_CONTENT vc;
+        pkt_base vc_pause = {4, 0x14};
+        size_t offset = 0;
+        vc.hdr.length = 1028;
+        while(offset + 1024 <= send_buffer_size) {
+            s.Send(&vc, 4);
+            s.Send(&send_buffer[offset], 1024);
+            offset += 1024;
+        }
+        if(offset != send_buffer_size) {
+            vc.hdr.length = 4 + send_buffer_size - offset;
+            s.Send(&vc, 4);
+            s.Send(&send_buffer[offset], send_buffer_size - offset);
+        }
+        s.Send(&vc_pause, 4);
+    }
+
     void SendAll(Sender& s) {
         static const int32_t send_threshold = 2 * 1024 * 1024;
         static const char* path_prefix = "ux0:ptmp/pkg/";
         ZipFileHeader file_header;
-        VTP_VPK_CONTENT vc;
-        pkt_base vc_pause = {4, 0x14};
         send_buffer_size = 0;
+        int32_t file_count = 1;
+        int64_t bytes_sent = 0;
         for(auto& iter : entries) {
             short nlen = iter.first.length() + 13;
             int32_t csize = iter.second.comp_size;
@@ -186,34 +204,34 @@ public:
             zip_file.read((char*)&file_header, ZIP_FILE_SIZE);
             zip_file.seekg(file_header.name_size + file_header.ex_size, zip_file.cur);
             int32_t bytes_left = file_header.comp_size;
+            std::cout << "[" << file_count << "/" << entries.size() << "]: Uploading " << iter.first
+                << " ... [0/" << file_header.comp_size << "] " << std::flush;
             while(bytes_left != 0) {
                 if(bytes_left + send_buffer_size <= send_threshold) {
                     zip_file.read((char*)&send_buffer[send_buffer_size], bytes_left);
                     send_buffer_size += bytes_left;
                     bytes_left = 0;
+                    std::cout << "\r[" << file_count << "/" << entries.size() << "]: Uploading " << iter.first
+                         << " ... [" << file_header.comp_size << "/" << file_header.comp_size << "] " << std::flush;
                 } else {
                     if(send_buffer_size < send_threshold) {
                         zip_file.read((char*)&send_buffer[send_buffer_size], send_threshold - send_buffer_size);
                         bytes_left -= send_threshold - send_buffer_size;
                         send_buffer_size = send_threshold;
                     }
-                    int32_t offset = 0;
-                    vc.hdr.length = 1028;
-                    while(offset + 1024 <= send_buffer_size) {
-                        s.Send(&vc, 4);
-                        s.Send(&send_buffer[offset], 1024);
-                        offset += 1024;
-                    }
-                    if(offset != send_buffer_size) {
-                        vc.hdr.length = 4 + send_buffer_size - offset;
-                        s.Send(&vc, 4);
-                        s.Send(&send_buffer[offset], send_buffer_size - offset);
-                    }
+                    SendBuffer(s);
                     send_routine->yield();
+                    bytes_sent += send_buffer_size;
+                    std::cout << "\r[" << file_count << "/" << entries.size() << "]: Uploading " << iter.first
+                         << " ... [" << bytes_sent << "/" << file_header.comp_size << "] " << std::flush;
                     send_buffer_size = 0;
                 }
             }
+            file_count++;
+            std::cout << "done." << std::endl;
         }
+        if(send_buffer_size)
+            SendBuffer(s);
         VTP_INSTALL_VPK_END ve;
         s.Send(&ve, 4);
     }
@@ -282,7 +300,16 @@ public:
                 break;
             }
             case 0x1d: {
-                std::cout << "install success." << std::endl;
+                int32_t result = *(int32_t*)data;
+                if(result != 0) {
+                    if(result == 1)
+                        std::cout << "makeHeadBin() error." << std::endl;
+                    else if(result == 2)
+                        std::cout << "promote() error." << std::endl;
+                    else
+                        std::cout << "Unknown error." << std::endl;
+                } else
+                    std::cout << "install success." << std::endl;
                 return 1;
                 break;
             }

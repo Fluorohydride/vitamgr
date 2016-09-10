@@ -55,7 +55,6 @@ struct VTP_INSTALL_VPK {
 
 struct VTP_VPK_CONTENT {
     pkt_base hdr = {4, 0x14};
-    uint8_t buf[1024];
 };
 
 struct VTP_INSTALL_VPK_END {
