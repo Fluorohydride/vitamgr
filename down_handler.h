@@ -1,5 +1,5 @@
-#ifndef _COPY_HANDLER_H_
-#define _COPY_HANDLER_H_
+#ifndef _DOWN_HANDLER_H_
+#define _DOWN_HANDLER_H_
 
 #include "common.h"
 #include "cotiny.hh"
@@ -46,7 +46,7 @@ public:
     }
     
     void InitSend(Sender& s) {
-        VTP_BEGIN_FILE bf;
+        VTP_DOWN_FILE df;
         bf.hdr.length = 12 + vita_path.length() + 1;
         bf.hdr.type = 0x10;
         bf.size = file_size;
@@ -57,36 +57,20 @@ public:
     
     int32_t HandlePacket(Sender& s, short type, void* data, int32_t length) {
         switch(type) {
-            case 0x10: {
+            case 0x13: {
                 int32_t result = ((int32_t*)data)[0];
-                int32_t offset = ((int32_t*)data)[1];
+                int32_t fsize = ((int32_t*)data)[1];
                 if(result != 0) {
-                    if(result == 1)
-                        std::cout << "Not finished yet." << std::endl;
-                    else if(result == 2)
-                        std::cout << "User canceled." << std::endl;
-                    else if(result == 3)
-                        std::cout << "Cannot create path." << std::endl;
-                    else if(result == 4)
-                        std::cout << "Cannot open file." << std::endl;
-                    else
-                        std::cout << "Unknown error." << std::endl;
-                    return 1;
+
                 }
-                if(send_routine)
-                    break;
-                auto co_fun = [this, &s](cotiny::Coroutine<>* co, int32_t off) {
-                    SendAll(s, off);
-                };
-                send_routine = new cotiny::Coroutine<>(co_fun, 0x10000);
-                send_routine->resume(offset);
+                
             }
-            case 0x11: {
+            case 0x14: {
                 if(send_routine)
                     send_routine->resume();
                 break;
             }
-            case 0x12: {
+            case 0x15: {
                 std::cout << "done." << std::endl;
                 return 1;
                 break;

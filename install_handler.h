@@ -273,7 +273,7 @@ public:
     
     int32_t HandlePacket(Sender& s, short type, void* data, int32_t length) {
         switch(type) {
-            case 0x1b: {
+            case 0x20: {
                 int32_t result = *(int32_t*)data;
                 if(result != 0) {
                     if(result == 1)
@@ -294,12 +294,12 @@ public:
                 send_routine->resume();
                 break;
             }
-            case 0x1c: {
+            case 0x21: {
                 if(send_routine)
                     send_routine->resume();
                 break;
             }
-            case 0x1d: {
+            case 0x22: {
                 int32_t result = *(int32_t*)data;
                 if(result != 0) {
                     if(result == 1)

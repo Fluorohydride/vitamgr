@@ -46,19 +46,27 @@ struct VTP_FILE_END {
     pkt_base hdr = {4, 0x12};
 };
 
+struct VTP_DOWN_FILE {
+    pkt_base hdr = {4, 0x13};
+};
+
+struct VTP_DOWN_CONTINE {
+    pkt_base hdr = {4, 0x14};
+};
+
 struct VTP_INSTALL_VPK {
-    pkt_base hdr = {16, 0x13};
+    pkt_base hdr = {16, 0x20};
     uint32_t total_size_l = 0;
     uint32_t total_size_h = 0;
     uint32_t flag = 0;
 };
 
 struct VTP_VPK_CONTENT {
-    pkt_base hdr = {4, 0x14};
+    pkt_base hdr = {4, 0x21};
 };
 
 struct VTP_INSTALL_VPK_END {
-    pkt_base hdr = {4, 0x15};
+    pkt_base hdr = {4, 0x22};
 };
 
 struct VTRP_RES {
